@@ -1,7 +1,9 @@
 package com.example.internship_plugin
 
 
+import com.intellij.ide.highlighter.JavaFileType
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
@@ -21,80 +23,51 @@ import javax.swing.JPanel
 
 
 class CalendarToolWindowFactory : ToolWindowFactory {
+    val filesToClasses = HashMap<String, List<String>>()
+    private val toolWindowContent = TestContent()
+    fun initFilesToClasses(project: Project) {
+        val files = FilenameIndex.getAllFilesByExt(project, "java", GlobalSearchScope.projectScope(project))
+        files.forEach { file ->
+            filesToClasses[file.name] = classesFromFile(project, file).mapNotNull { it.name }
+        }
+    }
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
-        val toolWindowContent = TestContent()
         val content: Content = ContentFactory.getInstance().createContent(toolWindowContent.contentPanel, "", false)
         toolWindow.contentManager.addContent(content)
-
-//        PsiManager.getInstance(project).addPsiTreeChangeListener(MyListener())
-        project.messageBus.connect().subscribe(VirtualFileManager.VFS_CHANGES, MyFileListener())
-        VirtualFileManager.VFS_CHANGES
-//        val classesCollector = ClassesCollector(project)
-//        GlobalScope.launch {
-//            launch { classesCollector.startCollecting() }
-//            classesCollector.classCollection.collect {
-//                it -> println(it.toString())
-//            }
-//        }
+        project.messageBus.connect().subscribe(VirtualFileManager.VFS_CHANGES, MyFileListener(project, this))
+        initFilesToClasses(project)
+        redrawContent()
     }
 
-    internal class MyFileListener : BulkFileListener {
-//        override fun before(events: MutableList<out VFileEvent>) {
-//            println(events.toString())
-//        }
+    private fun classesFromFile(project: Project, file: VirtualFile): List<PsiClassImpl> {
+        return PsiManager.getInstance(project).findFile(file)!!.childrenOfType<PsiClassImpl>()
+    }
 
+    internal class MyFileListener(
+        private val project: Project,
+        val calendarToolWindowFactory: CalendarToolWindowFactory) : BulkFileListener {
         override fun after(events: MutableList<out VFileEvent>) {
-            println(events.toString())
+            events.forEach {
+                it.file?.let { file ->
+                    if (file.fileType == JavaFileType.INSTANCE) {
+                        if (!file.isValid) {
+                            calendarToolWindowFactory.filesToClasses.remove(file.name)
+                        } else {
+                            calendarToolWindowFactory.filesToClasses[file.name] =
+                                calendarToolWindowFactory.classesFromFile(project, file).mapNotNull { it.name }
+                        }
+                    }
+                }
+            }
+            calendarToolWindowFactory.redrawContent()
         }
     }
 
-    internal class MyListener : PsiTreeChangeListener {
-        override fun beforeChildAddition(event: PsiTreeChangeEvent){}
-
-        override fun beforeChildRemoval(event: PsiTreeChangeEvent) {}
-        override fun beforeChildReplacement(event: PsiTreeChangeEvent) {}
-
-        override fun beforeChildMovement(event: PsiTreeChangeEvent) {}
-
-        override fun beforeChildrenChange(event: PsiTreeChangeEvent) {
-        }
-
-        override fun beforePropertyChange(event: PsiTreeChangeEvent) {
-        }
-
-        override fun childAdded(event: PsiTreeChangeEvent) {
-            println(event.toString())
-        }
-
-        override fun childRemoved(event: PsiTreeChangeEvent) {
-            println(event.toString())
-        }
-
-        override fun childReplaced(event: PsiTreeChangeEvent) {
-        }
-
-        override fun childrenChanged(event: PsiTreeChangeEvent) {
-        }
-
-        override fun childMoved(event: PsiTreeChangeEvent) {
-        }
-
-        override fun propertyChanged(event: PsiTreeChangeEvent) {
-        }
-
+    fun redrawContent() {
+        toolWindowContent.text.text = filesToClasses.values.flatten().joinToString()
     }
 
-    fun printClassess(project: Project) {
-        val fileNames = FilenameIndex.getAllFilesByExt(project, "java", GlobalSearchScope.projectScope(project))
-        val classes = fileNames.mapNotNull {
-            PsiManager.getInstance(project).findFile(it)?.childrenOfType<PsiClassImpl>()?.map {
-                    jt -> jt.toString()
-            }?.toList()
-        }
-        println(classes.toList().flatten().toString())
-    }
-
-    internal class TestContent() {
+    class TestContent() {
         val contentPanel = JPanel()
         val text = JLabel()
 

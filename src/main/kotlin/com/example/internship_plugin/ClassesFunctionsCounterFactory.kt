@@ -24,36 +24,7 @@ class ClassesFunctionsCounterFactory : ToolWindowFactory {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val content: Content = ContentFactory.getInstance().createContent(toolWindowContent.contentPanel, "", false)
         toolWindow.contentManager.addContent(content)
-        project.messageBus.connect().subscribe(PsiModificationTracker.TOPIC, MyPsiListener(project, this))
-    }
-
-    class FileClassesFunctions(val file: String, val classes: Int, val functions: Int)
-
-    internal class MyPsiListener(
-        private val project: Project,
-        private val classesFunctionsCounterFactory: ClassesFunctionsCounterFactory
-    ) : PsiModificationTracker.Listener {
-        init {
-            val data = collectData()
-            classesFunctionsCounterFactory.redrawContent(data)
-        }
-
-        private fun classesInFile(file: VirtualFile): List<PsiClassImpl> {
-            return PsiManager.getInstance(project).findFile(file)!!.childrenOfType<PsiClassImpl>()
-        }
-
-        private fun collectData(): List<FileClassesFunctions> {
-            val files = FilenameIndex.getAllFilesByExt(project, "java", GlobalSearchScope.projectScope(project))
-            return files.mapNotNull { file ->
-                val classes = classesInFile(file)
-                FileClassesFunctions(file.name, classes.size, classes.sumOf { it.methods.size })
-            }
-        }
-
-        override fun modificationCountChanged() {
-            val data = collectData()
-            classesFunctionsCounterFactory.redrawContent(data)
-        }
+        project.messageBus.connect().subscribe(PsiModificationTracker.TOPIC, PsiListener(project, this))
     }
 
     fun redrawContent(fileClassesFunctions: List<FileClassesFunctions>) {
@@ -76,3 +47,5 @@ class ClassesFunctionsCounterFactory : ToolWindowFactory {
         }
     }
 }
+
+data class FileClassesFunctions(val file: String, val classes: Int, val functions: Int)

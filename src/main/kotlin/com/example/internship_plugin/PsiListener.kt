@@ -9,21 +9,21 @@ import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.util.PsiModificationTracker
 import com.intellij.psi.util.childrenOfType
 import org.jetbrains.annotations.TestOnly
+import org.jetbrains.annotations.VisibleForTesting
 
 class PsiListener(
     private val project: Project,
     private val classesFunctionsCounterFactory: ClassesFunctionsCounterFactory
 ) : PsiModificationTracker.Listener {
     init {
-        val data = collectData()
-        classesFunctionsCounterFactory.redrawContent(data)
+        modificationCountChanged()
     }
 
     private fun classesInFile(file: VirtualFile): List<PsiClassImpl> {
-        return PsiManager.getInstance(project).findFile(file)!!.childrenOfType<PsiClassImpl>()
+        return PsiManager.getInstance(project).findFile(file)?.childrenOfType<PsiClassImpl>() ?: listOf()
     }
 
-    @TestOnly
+    @VisibleForTesting
     fun collectData(): List<FileClassesFunctions> {
         val files = FilenameIndex.getAllFilesByExt(project, "java", GlobalSearchScope.projectScope(project))
         return files.mapNotNull { file ->

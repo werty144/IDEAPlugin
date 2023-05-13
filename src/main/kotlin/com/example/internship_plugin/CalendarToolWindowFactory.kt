@@ -2,6 +2,10 @@ package com.example.internship_plugin
 
 
 import com.intellij.ide.highlighter.JavaFileType
+import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.AnActionResult
+import com.intellij.openapi.actionSystem.ex.AnActionListener
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
@@ -15,6 +19,7 @@ import com.intellij.psi.PsiTreeChangeListener
 import com.intellij.psi.impl.source.PsiClassImpl
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.psi.util.PsiModificationTracker
 import com.intellij.psi.util.childrenOfType
 import com.intellij.ui.content.Content
 import com.intellij.ui.content.ContentFactory
@@ -31,22 +36,16 @@ class CalendarToolWindowFactory : ToolWindowFactory {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val content: Content = ContentFactory.getInstance().createContent(toolWindowContent.contentPanel, "", false)
         toolWindow.contentManager.addContent(content)
-        val fileChangeListener = MyFileListener(project, this)
-        project.messageBus.connect().subscribe(VirtualFileManager.VFS_CHANGES, fileChangeListener)
+        project.messageBus.connect().subscribe(PsiModificationTracker.TOPIC, MyPsiListener(project, this))
     }
 
-    internal class MyFileListener(
-        private val project: Project,
-        val calendarToolWindowFactory: CalendarToolWindowFactory) : BulkFileListener {
+    internal class MyPsiListener(val project: Project,
+                                    val calendarToolWindowFactory: CalendarToolWindowFactory) : PsiModificationTracker.Listener {
         init {
             val classes = collectClasses()
             calendarToolWindowFactory.redrawContent(classes)
         }
 
-        override fun after(events: MutableList<out VFileEvent>) {
-            val classes = collectClasses()
-            calendarToolWindowFactory.redrawContent(classes)
-        }
         private fun classesFromFile(file: VirtualFile): List<PsiClassImpl> {
             return PsiManager.getInstance(project).findFile(file)!!.childrenOfType<PsiClassImpl>()
         }
@@ -54,6 +53,11 @@ class CalendarToolWindowFactory : ToolWindowFactory {
         fun collectClasses(): List<PsiClassImpl> {
             val files = FilenameIndex.getAllFilesByExt(project, "java", GlobalSearchScope.projectScope(project))
             return files.mapNotNull { file ->  classesFromFile(file)}.flatten()
+        }
+
+        override fun modificationCountChanged() {
+            val classes = collectClasses()
+            calendarToolWindowFactory.redrawContent(classes)
         }
     }
 

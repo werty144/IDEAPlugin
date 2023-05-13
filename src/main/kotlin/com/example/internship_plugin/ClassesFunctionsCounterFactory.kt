@@ -7,7 +7,6 @@ import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.psi.PsiManager
 import com.intellij.psi.impl.source.PsiClassImpl
-import com.intellij.psi.impl.source.PsiMethodImpl
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.util.PsiModificationTracker
@@ -19,7 +18,7 @@ import javax.swing.JLabel
 import javax.swing.JPanel
 
 
-class CalendarToolWindowFactory : ToolWindowFactory {
+class ClassesFunctionsCounterFactory : ToolWindowFactory {
     private val toolWindowContent = TestContent()
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
@@ -30,18 +29,20 @@ class CalendarToolWindowFactory : ToolWindowFactory {
 
     class FileClassesFunctions(val file: String, val classes: Int, val functions: Int)
 
-    internal class MyPsiListener(val project: Project,
-                                    val calendarToolWindowFactory: CalendarToolWindowFactory) : PsiModificationTracker.Listener {
+    internal class MyPsiListener(
+        private val project: Project,
+        private val classesFunctionsCounterFactory: ClassesFunctionsCounterFactory
+    ) : PsiModificationTracker.Listener {
         init {
             val data = collectData()
-            calendarToolWindowFactory.redrawContent(data)
+            classesFunctionsCounterFactory.redrawContent(data)
         }
 
         private fun classesInFile(file: VirtualFile): List<PsiClassImpl> {
             return PsiManager.getInstance(project).findFile(file)!!.childrenOfType<PsiClassImpl>()
         }
 
-        fun collectData(): List<FileClassesFunctions> {
+        private fun collectData(): List<FileClassesFunctions> {
             val files = FilenameIndex.getAllFilesByExt(project, "java", GlobalSearchScope.projectScope(project))
             return files.mapNotNull { file ->
                 val classes = classesInFile(file)
@@ -51,7 +52,7 @@ class CalendarToolWindowFactory : ToolWindowFactory {
 
         override fun modificationCountChanged() {
             val data = collectData()
-            calendarToolWindowFactory.redrawContent(data)
+            classesFunctionsCounterFactory.redrawContent(data)
         }
     }
 

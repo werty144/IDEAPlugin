@@ -18,63 +18,62 @@ import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.util.childrenOfType
 import com.intellij.ui.content.Content
 import com.intellij.ui.content.ContentFactory
+import javax.swing.BoxLayout
+import javax.swing.JFrame
 import javax.swing.JLabel
 import javax.swing.JPanel
+import javax.swing.OverlayLayout
 
 
 class CalendarToolWindowFactory : ToolWindowFactory {
-    val filesToClasses = HashMap<String, List<String>>()
     private val toolWindowContent = TestContent()
-    fun initFilesToClasses(project: Project) {
-        val files = FilenameIndex.getAllFilesByExt(project, "java", GlobalSearchScope.projectScope(project))
-        files.forEach { file ->
-            filesToClasses[file.name] = classesFromFile(project, file).mapNotNull { it.name }
-        }
-    }
+
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val content: Content = ContentFactory.getInstance().createContent(toolWindowContent.contentPanel, "", false)
         toolWindow.contentManager.addContent(content)
-        project.messageBus.connect().subscribe(VirtualFileManager.VFS_CHANGES, MyFileListener(project, this))
-        initFilesToClasses(project)
-        redrawContent()
-    }
-
-    private fun classesFromFile(project: Project, file: VirtualFile): List<PsiClassImpl> {
-        return PsiManager.getInstance(project).findFile(file)!!.childrenOfType<PsiClassImpl>()
+        val fileChangeListener = MyFileListener(project, this)
+        project.messageBus.connect().subscribe(VirtualFileManager.VFS_CHANGES, fileChangeListener)
     }
 
     internal class MyFileListener(
         private val project: Project,
         val calendarToolWindowFactory: CalendarToolWindowFactory) : BulkFileListener {
+        init {
+            val classes = collectClasses()
+            calendarToolWindowFactory.redrawContent(classes)
+        }
+
         override fun after(events: MutableList<out VFileEvent>) {
-            events.forEach {
-                it.file?.let { file ->
-                    if (file.fileType == JavaFileType.INSTANCE) {
-                        if (!file.isValid) {
-                            calendarToolWindowFactory.filesToClasses.remove(file.name)
-                        } else {
-                            calendarToolWindowFactory.filesToClasses[file.name] =
-                                calendarToolWindowFactory.classesFromFile(project, file).mapNotNull { it.name }
-                        }
-                    }
-                }
-            }
-            calendarToolWindowFactory.redrawContent()
+            val classes = collectClasses()
+            calendarToolWindowFactory.redrawContent(classes)
+        }
+        private fun classesFromFile(file: VirtualFile): List<PsiClassImpl> {
+            return PsiManager.getInstance(project).findFile(file)!!.childrenOfType<PsiClassImpl>()
+        }
+
+        fun collectClasses(): List<PsiClassImpl> {
+            val files = FilenameIndex.getAllFilesByExt(project, "java", GlobalSearchScope.projectScope(project))
+            return files.mapNotNull { file ->  classesFromFile(file)}.flatten()
         }
     }
 
-    fun redrawContent() {
-        toolWindowContent.text.text = filesToClasses.values.flatten().joinToString()
+    fun redrawContent(classes: List<PsiClassImpl>) {
+        toolWindowContent.contentPanel.removeAll()
+        classes.forEach {
+            val label = JLabel()
+            label.text = it.name
+            toolWindowContent.contentPanel.add(label)
+        }
+        toolWindowContent.contentPanel.revalidate()
+        toolWindowContent.contentPanel.repaint()
     }
 
     class TestContent() {
         val contentPanel = JPanel()
-        val text = JLabel()
 
         init {
             contentPanel.setLocation(0, 0)
-            text.text = "Huy!"
-            contentPanel.add(text)
+            contentPanel.layout = BoxLayout(contentPanel, BoxLayout.Y_AXIS)
         }
     }
 }
